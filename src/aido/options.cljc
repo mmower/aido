@@ -8,11 +8,6 @@
               rval
               (conj rval option))) [] required))
 
-(comment (defn has-required-options? [options required]
-           "Tests that the options map has all of the keys specified in the required vector."
-           (reduce (fn [rval option]
-                     (and rval (contains? options option))) true required)))
-
 (defn parse-options [args & {:keys [required] :or {required []}}]
   "Returns a tuple containing an options map and a sequence of arguments. Where the first
   passed in argument is a map returns that as the options map, otherwise returns an empty
@@ -32,7 +27,6 @@
 (defmulti required-options
           "The options function specifies the expected options for a given node type."
           (fn [[node & _]]
-            (println "required-options.node:" node)
             node))
 
 (defmethod required-options :default [& _]

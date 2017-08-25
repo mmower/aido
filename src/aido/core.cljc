@@ -71,6 +71,20 @@
           result
           (recur (:db result) (inc n)))))))
 
+
+(defmethod ao/required-options :loop-until-success [& _]
+  [:count])
+
+(defmethod tick :loop-until-success [db [node-type options & [child & _]]]
+  (loop [db db
+         n  0]
+    (if (= n (:count options))
+      (tick-result FAILURE db)
+      (let [result (tick db child)]
+        (if (has-not-failed? result)
+          result
+          (recur (:db result) (inc n)))))))
+
 ; PARALLEL
 ;
 ; The parallel node executes all of its children in parallel
@@ -115,6 +129,16 @@
 ;
 ; If any child returns FAILURE the sequence halts and returns FAILURE
 ; If all children return SUCCESS the sequence returns SUCCESS
+
+[:sequence ...]
+
+(defmethod tick :sequence [db [node-type options & children]]
+  (reduce (fn [{:keys [db]} child]
+            (let [result (tick db child)]
+              (if (has-failed? result)
+                (reduced result)
+                result))
+            ) {:db db} children))
 
 
 ; ALWAYS
@@ -232,7 +256,11 @@
 ; SUCCESS
 ; FAILURE -
 
+(defmethod tick :failure [db [node-type options & _]]
+  (tick-result FAILURE db))
 
+(defmethod tick :success [db [node-type options & _]]
+  (tick-result SUCCESS db))
 
 
 
