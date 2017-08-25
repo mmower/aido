@@ -102,6 +102,26 @@
 [:parallel {:success-mode :any :failure-mode :any}
  ...]
 
+(defmethod ao/required-options :parallel [& _]
+  [:mode :test])
+
+(defmethod tick :parallel [db [node-type {:keys [mode test]} & children]]
+  (let [c (count children)
+        {:keys [success failure db]} (reduce (fn [{:keys [success failure db]} child]
+                                               (let [result (tick db child)]
+                                                 {:success (if (has-not-failed? result) (inc success) success)
+                                                  :failure (if (has-failed? result) (inc failure) failure)
+                                                  :db      (:db result)})
+                                               ) {:success 0 :failure 0 :db db} children)]
+    (cond
+      (and (= :success mode) (= :all test) (= c success)) (tick-result SUCCESS db)
+      (and (= :success mode) (= :any test) (> success 0)) (tick-result SUCCESS db)
+      (= :success mode) (tick-result FAILURE db)
+      (and (= :failure mode) (= :all test) (= c failure)) (tick-result FAILURE db)
+      (and (= :failure mode) (= :any test) (> failure 0)) (tick-result FAILURE db)
+      (= :failure mode) (tick-result SUCCESS db))))
+
+
 ; SELECT
 ;
 ; The :select node executes its children sequentially stopping after the first one that
@@ -158,50 +178,6 @@
   (let [{:keys [status db]} (tick db child)]
     (tick-result (:returning options) db)))
 
-; TIMEOUT
-;
-; The :timeout node returns FAILURE after a certain amount of time has passed
-;
-; :duration <ticks>
-;
-
-[:timeout {:duration 5}]
-
-; WAIT
-;
-; The :wait node returns SUCCESS after a certain amount of time has passed
-;
-; :duration <ticks>
-
-[:wait]
-
-[:wait-until]
-
-[:if-time]
-
-
-; SPEECH
-;
-; The :speech node will have the current agent speak
-;
-; :say [:template (params...)]
-;
-; Returns
-; SUCCESS
-
-[:speech {:say [:hello]}]
-
-; MOVE
-;
-; The :move node moves the current agent to another location
-;
-; Parameters
-; :to - ID of location to move to
-;
-; Returns
-; SUCCESS if the agent has moved
-; FAILURE if the agent is unable to move
-
 ; RANDOMLY
 ;
 ; The :randomly node either
@@ -229,45 +205,8 @@
         (tick db (first children))
         (tick db (second children)))))
 
-; IF
-;
-; The :if node checks a condition. If the condition is true it runs the first child
-; otherwise it runs the second child if specified.
-;
-; Parameters
-; :condition <exp>
-;
-; Returns
-; SUCCESS if either child is executed and returns SUCCESS
-; FAILURE if either child is executed and returns FAILURE or if the condition fails and no second child is specified
-
-[:if {:condition ...}
- ...
- ...]
-
-; WAIT-UNTIL
-;
-; The :wait-until node executes until the time condition is satisifed
-;
-; Parameters
-; :
-;
-; Returns
-; SUCCESS
-; FAILURE -
-
 (defmethod tick :failure [db [node-type options & _]]
   (tick-result FAILURE db))
 
 (defmethod tick :success [db [node-type options & _]]
   (tick-result SUCCESS db))
-
-
-
-(defmethod tick :nop [db _ & args]
-  (println "NOP")
-  (tick-result SUCCESS db))
-
-
-(defmethod tick :inc [db [node-type options & _]]
-  (tick-result SUCCESS (update db :counter (fnil inc 0))))
