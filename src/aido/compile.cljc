@@ -30,13 +30,9 @@
                         id       (swap! id-source inc)
                         req-opts (ao/required-options node)]
                     (try
-                      (if (map? (first args))
-                        (let [[opts children] (ao/parse-options args :required req-opts)
-                              opts     (assoc opts :id id)
-                              new-node (into [node-type] children)]
-                          (with-meta new-node opts))
-                        (let [[opts children] (ao/parse-options {} :required req-opts)]
-                          (with-meta node {:id id})))
+                      (let [[opts children] (ao/parse-options args :required req-opts)
+                            new-opts (assoc opts :id id)]
+                        (into [node-type new-opts] children))
                       (catch Exception ex
                         (throw (Exception. (str "While processing " node " " (.getMessage ex))))))) node)) t)))
 

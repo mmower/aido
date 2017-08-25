@@ -38,7 +38,7 @@
 
 (defmulti tick
           "The tick function sends the tick to a node of different types."
-          {:arglists '([db options? node])}
+          {:arglists '([db options node])}
           tick-node-type)
 
 
@@ -60,25 +60,16 @@
 (defmethod ao/required-options :loop [& _]
   [:count])
 
-(defmethod tick :loop [db [node-type & args]]
-  (println "db:" db)
-  (println "node-type:" node-type)
-  (println "args:" args)
-  (let [[{:keys [count]} [child & _]] (parse-options args :required [:count])]
-    (println "count:" count)
-    (println "child:" child)
-    (loop [db db
-           n  0]
-      (println "n:" n)
-      (if (= n count)
-        (tick-result FAILURE db)
-        (let [result (tick db child)]
-          (println "result:" result)
-          (if (has-failed? result)
-            (do
-              (println "HAS FAILED")
-              result)
-            (recur (:db result) (inc n))))))))
+(defmethod tick :loop [db [node-type options & [child & _]]]
+  (loop [db db
+         n  0]
+    (if (= n (:count options))
+      (tick-result SUCCESS db)
+      (let [result (tick db child)]
+
+        (if (has-failed? result)
+          result
+          (recur (:db result) (inc n)))))))
 
 ; PARALLEL
 ;
@@ -107,17 +98,16 @@
 [:selector
  ...]
 
-(defmethod tick :selector [db _ & args]
-  (let [[options children] (parse-options args)]
-    (loop [db        db
-           child     (first children)
-           remaining (rest children)]
-      (let [{:keys [status db] :as rval} (tick db child)]
-        (if (has-not-failed? rval)
-          rval
-          (if (empty? remaining)
-            (tick-result FAILURE db)
-            (recur db (first remaining) (rest remaining))))))))
+(defmethod tick :selector [db [node-type options & children]]
+  (loop [db        db
+         child     (first children)
+         remaining (rest children)]
+    (let [{:keys [status db] :as rval} (tick db child)]
+      (if (has-not-failed? rval)
+        rval
+        (if (empty? remaining)
+          (tick-result FAILURE db)
+          (recur db (first remaining) (rest remaining)))))))
 
 ; SEQUENCE
 ;
@@ -140,12 +130,9 @@
 (defmethod ao/required-options :always [& _]
   [:returning])
 
-(defmethod tick :always [db [op & args]]
-  (let [[{:keys [returning]} children] (parse-options args :required [:returning])]
-    (if (= 1 (count children))
-      (tick db (first children))
-      (throw (Exception. "Node :always must have exactly one child!")))
-    returning))
+(defmethod tick :always [db [node-type options & [child & _]]]
+  (let [{:keys [status db]} (tick db child)]
+    (tick-result (:returning options) db)))
 
 ; TIMEOUT
 ;
@@ -209,15 +196,14 @@
 (defmethod ao/required-options :randomly [& _]
   [:p])
 
-(defmethod tick :randomly [db [op & args]]
-  (let [[{:keys [p]} children] (parse-options args :required [:p])]
-    (case (count children)
-      1 (if (< (rand) p)
-          (tick db (first children))
-          (tick-result FAILURE db))
-      2 (if (< (rand) p)
-          (tick db (first children))
-          (tick db (second children))))))
+(defmethod tick :randomly [db [node-type options & children]]
+  (case (count children)
+    1 (if (< (rand) (:p options))
+        (tick db (first children))
+        (tick-result FAILURE db))
+    2 (if (< (rand) (:p options))
+        (tick db (first children))
+        (tick db (second children)))))
 
 ; IF
 ;
@@ -253,3 +239,7 @@
 (defmethod tick :nop [db _ & args]
   (println "NOP")
   (tick-result SUCCESS db))
+
+
+(defmethod tick :inc [db [node-type options & _]]
+  (tick-result SUCCESS (update db :counter (fnil inc 0))))
