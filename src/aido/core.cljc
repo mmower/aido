@@ -1,5 +1,6 @@
 (ns aido.core
   (:require [clojure.string :as str]
+            [aido.error :refer [throw-error]]
             [aido.options :as ao]
             [aido.compile :as ac]))
 

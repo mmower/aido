@@ -1,6 +1,7 @@
 (ns aido.compile
   (:refer-clojure :exclude [compile])
   (:require [clojure.string :as str]
+            [aido.error :refer [throw-error]]
             [aido.options :as ao]))
 
 (defn walk
@@ -33,6 +34,9 @@
                       (let [[opts children] (ao/parse-options args :required req-opts)
                             new-opts (assoc opts :id id)]
                         (into [node-type new-opts] children))
-                      (catch Exception ex
-                        (throw (Exception. (str "While processing " node " " (.getMessage ex))))))) node)) t)))
+                      #?(:clj  (catch Exception ex
+                                 (throw-error (str "While processing " node " " (.getMessage ex))))
+                         :cljs (catch :default e
+                                 (throw-error (str "While processing " node " " e))))))
+                  node)) t)))
 

@@ -1,5 +1,6 @@
 (ns aido.options
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [aido.error :refer [throw-error]]))
 
 (defn missing-options [options required]
   "Checks the options map has all the required keys. Returns a vector of missing keys."
@@ -22,7 +23,7 @@
         missing        (missing-options options required)]
     (if (empty? missing)
       [options remaining-args]
-      (throw (Exception. (str "Required options missing: " (str/join ", " missing)))))))
+      (throw-error (str "Required options missing: " (str/join ", " missing))))))
 
 (defmulti required-options
           "The options function specifies the expected options for a given node type."
