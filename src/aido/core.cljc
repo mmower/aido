@@ -13,6 +13,15 @@
 ; specific node and the database state after the tick function has run.
 (defrecord TickResult [status db])
 
+(def valid-statuses #{SUCCESS FAILURE RUNNING ERROR})
+
+(defn tick-result [status db]
+  (assert (valid-statuses status) "Invalid status")
+  (TickResult. status db))
+
+(defn succeed-if [pred]
+  (if pred SUCCESS FAILURE))
+
 (defn has-succeeded?
   "Given a TickResult returns true if the status is SUCCESS or RUNNING"
   [result]
@@ -45,6 +54,9 @@
 (defmethod ao/required-options :loop [& _]
   [:count])
 
+(defmethod ao/required-children :loop [& _]
+  1)
+
 (defmethod tick :loop [db [node-type options & [child & _]]]
   (loop [db db
          n  0]
@@ -59,6 +71,9 @@
 
 (defmethod ao/required-options :loop-until-success [& _]
   [:count])
+
+(defmethod ao/required-children :loop-until-success [& _]
+  1)
 
 (defmethod tick :loop-until-success [db [node-type options & [child & _]]]
   (loop [db db
@@ -87,6 +102,9 @@
 (defmethod ao/required-options :parallel [& _]
   [:mode :test])
 
+(defmethod ao/required-children :parallel [& _]
+  :some)
+
 (defmethod tick :parallel [db [node-type {:keys [mode test]} & children]]
   (let [c (count children)
         {:keys [success failure db]} (reduce (fn [{:keys [success failure db]} child]
@@ -110,6 +128,9 @@
 ;
 ; If no child returns SUCCESS the :select returns FAILURE
 
+(defmethod ao/required-children :selector [& _]
+  :some)
+
 (defmethod tick :selector [db [node-type options & children]]
   (loop [db        db
          child     (first children)
@@ -128,6 +149,9 @@
 ; If any child returns FAILURE the sequence halts and returns FAILURE
 ; If all children return SUCCESS the sequence returns SUCCESS
 
+(defmethod ao/required-children :sequence [& _]
+  :some)
+
 (defmethod tick :sequence [db [node-type options & children]]
   (reduce (fn [{:keys [db]} child]
             (let [result (tick db child)]
@@ -136,19 +160,32 @@
                 result))
             ) {:db db} children))
 
+
 ; ALWAYS
 ;
-; The :always node can have a single child and returns a fixed value regardless of whether the child
-; returns SUCCESS or FAILURE
-;
-; :returns SUCCESS | FAILURE
+; The :always node takes a single child and ticks it but returns SUCCESS regardless
+; of what the child returns
 
-(defmethod ao/required-options :always [& _]
-  [:returning])
+(defmethod ao/required-children :always [& _]
+  1)
 
-(defmethod tick :always [db [node-type options & [child & _]]]
+(defmethod tick :always
+  [db [node-type options & [child & _]]]
   (let [{:keys [status db]} (tick db child)]
-    (TickResult. (:returning options) db)))
+    (TickResult. SUCCESS db)))
+
+; NEVER
+;
+; The :never node takes a single child and ticks it but returns FAILURE regardless
+; of what the child returns
+
+(defmethod ao/required-children :never [& _]
+  1)
+
+(defmethod tick :never
+  [db [node-type options & [child & _]]]
+  (let [{:keys [status db]} (tick db child)]
+    (TickResult. FAILURE db)))
 
 ; RANDOMLY
 ;
@@ -164,6 +201,9 @@
 
 (defmethod ao/required-options :randomly [& _]
   [:p])
+
+(defmethod ao/required-children :randomly [& _]
+  #{1 2})
 
 (defmethod tick :randomly [db [node-type options & children]]
   (case (count children)

@@ -32,3 +32,11 @@
 
 (defmethod required-options :default [& _]
   [])
+
+(defmulti required-children
+          "The children function specifies the expected number of children for a given node type."
+          (fn [[node-type & _]]
+            node-type))
+
+(defmethod required-children :default [& _]
+  0)
