@@ -25,18 +25,18 @@
       [options remaining-args]
       (throw-error (str "Required options missing: " (str/join ", " missing))))))
 
-(defmulti required-options
+(defmulti options
           "The options function specifies the expected options for a given node type."
           (fn [[node & _]]
             node))
 
-(defmethod required-options :default [& _]
+(defmethod options :default [& _]
   [])
 
-(defmulti required-children
+(defmulti children
           "The children function specifies the expected number of children for a given node type."
           (fn [[node-type & _]]
             node-type))
 
-(defmethod required-children :default [& _]
+(defmethod children :default [& _]
   0)
