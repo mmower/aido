@@ -1,4 +1,4 @@
-(defproject aido "0.1.6"
+(defproject aido "0.2.0"
   :description "AIDO: AI do - behaviour tree library for Clojure and ClojureScript"
   :url "http://mattmower.com/aido"
   :license {:name "Eclipse Public License"
