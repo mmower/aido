@@ -16,7 +16,7 @@
 (def valid-statuses #{SUCCESS FAILURE RUNNING ERROR})
 
 (defn tick-result [status db]
-  (assert (valid-statuses status) "Invalid status") 
+  (assert (valid-statuses status) "Invalid status")
   (TickResult. status db))
 
 (defn tick-success
@@ -50,15 +50,30 @@
     (or (= status SUCCESS)
         (= status RUNNING))))
 
+(defn in-progress?
+  [result]
+  (= (:status result) RUNNING))
+
 (def has-failed? (complement has-succeeded?))
 
 (defn tick-node-type
   "Given a node [node-type & _] return the node-type for multi-method discrimination"
-  [db [node-type & _]] node-type)
+  [db [node-type & _] wmem] node-type)
+
+
+; The tick method has the signature
+;
+; [db [node-type options [& children]] wmem]
+;
+; db is the persistent database that conditions and actions can query about the domain
+; node-type is the behaviour node type keyword (e.g. :selector)
+; options is a map of options. Every node is guaranteed to have an :id value
+; children is the zero or more child nodes of this node
+; wmem is the working memory which is non-persistent and passed down to child nodes
+;
 
 (defmulti tick
           "The tick function sends the tick to a node of different types."
-          {:arglists '([db options node])}
           tick-node-type)
 
 ; Core node types
@@ -78,12 +93,12 @@
 (defmethod ao/children :loop [& _]
   1)
 
-(defmethod tick :loop [db [node-type options & [child & _]]]
+(defmethod tick :loop [db [node-type {:keys [count]} & [child & _]] wmem]
   (loop [db db
          n  0]
-    (if (= n (:count options))
+    (if (= count n)
       (tick-success db)
-      (let [result (tick db child)]
+      (let [result (tick db child wmem)]
         (if (has-failed? result)
           result
           (recur (:db result) (inc n)))))))
@@ -100,12 +115,12 @@
 (defmethod ao/children :loop-until-success [& _]
   1)
 
-(defmethod tick :loop-until-success [db [node-type options & [child & _]]]
+(defmethod tick :loop-until-success [db [node-type {:keys [count]} & [child & _]] wmem]
   (loop [db db
          n  0]
-    (if (= n (:count options))
+    (if (= n count)
       (tick-failure db)
-      (let [result (tick db child)]
+      (let [result (tick db child wmem)]
         (if (has-succeeded? result)
           result
           (recur (:db result) (inc n)))))))
@@ -132,10 +147,10 @@ pos?
 (defmethod ao/children :parallel [& _]
   :some)
 
-(defmethod tick :parallel [db [node-type {:keys [mode how-many]} & children]]
+(defmethod tick :parallel [db [node-type {:keys [mode how-many]} & children] wmem]
   (let [c            (count children)
         {:keys [success failure db]} (reduce (fn [{:keys [success failure db]} child]
-                                               (let [result (tick db child)]
+                                               (let [result (tick db child wmem)]
                                                  {:success (if (has-succeeded? result) (inc success) success)
                                                   :failure (if (has-failed? result) (inc failure) failure)
                                                   :db      (:db result)})
@@ -157,31 +172,64 @@ pos?
 (defmethod ao/children :selector [& _]
   :some)
 
-(defmethod tick :selector [db [node-type options & children]]
+(defmethod tick :selector [db [node-type options & children] wmem]
   (loop [db        db
          child     (first children)
          remaining (rest children)]
-    (let [{:keys [status db] :as rval} (tick db child)]
+    (let [{:keys [status db] :as rval} (tick db child wmem)]
       (if (has-succeeded? rval)
         rval
         (if (empty? remaining)
           (tick-failure db)
           (recur db (first remaining) (rest remaining)))))))
 
+; SELECTOR-P
+;
+; Like the :selector, the :selector-p behaviour ticks its children sequentially stopping after the first one that
+; returns SUCCESS or RUNNING. However before ticking any child it first does a probability test to determine whether
+; to attempt to tick that child. If the test fails, it moves on to the next child.
+;
+; Parameters:
+; :p [0.0 .. 1.0] probability of ticking any given child node
+;
+
+(defmethod ao/children :selector-p [& _]
+  :some)
+
+(defmethod ao/options :selector-p [& _]
+  [:p])
+
+(defmethod tick :selector-p
+  [db [node-type {:keys [p] :as options} & children] wmem]
+  (loop [db        db
+         child     (first children)
+         remaining (rest children)]
+    (if (< (rand) p)
+      (let [{:keys [status db] :as rval} (tick db child wmem)]
+        (if (has-succeeded? rval)
+          rval
+          (if (empty? remaining)
+            (tick-failure db)
+            (recur db (first remaining) (rest remaining)))))
+      (if (empty? remaining)
+        (tick-failure db)
+        (recur db (first remaining) (rest remaining))))))
+
 ; SEQUENCE
 ;
 ; The :sequence node executes all of its children in turn.
 ;
-; If any child returns FAILURE the sequence halts and returns FAILURE
+; If a child returns FAILURE the sequence halts and returns FAILURE
+; If a child returns RUNNING the sequence halts and returns RUNNING
 ; If all children return SUCCESS the sequence returns SUCCESS
 
 (defmethod ao/children :sequence [& _]
   :some)
 
-(defmethod tick :sequence [db [node-type options & children]]
+(defmethod tick :sequence [db [node-type options & children] wmem]
   (reduce (fn [{:keys [db]} child]
-            (let [result (tick db child)]
-              (if (has-failed? result)
+            (let [result (tick db child wmem)]
+              (if (or (in-progress? result) (has-failed? result))
                 (reduced result)
                 result))
             ) {:db db} children))
@@ -196,8 +244,8 @@ pos?
   1)
 
 (defmethod tick :always
-  [db [node-type options & [child & _]]]
-  (let [{:keys [status db]} (tick db child)]
+  [db [node-type options [child & _]] wmem]
+  (let [{:keys [status db]} (tick db child wmem)]
     (tick-success db)))
 
 ; NEVER
@@ -209,8 +257,8 @@ pos?
   1)
 
 (defmethod tick :never
-  [db [node-type options & [child & _]]]
-  (let [{:keys [status db]} (tick db child)]
+  [db [node-type options [child & _]] wmem]
+  (let [{:keys [status db]} (tick db child wmem)]
     (tick-failure db)))
 
 ; INVERT
@@ -222,8 +270,8 @@ pos?
   1)
 
 (defmethod tick :invert
-  [db [node-type options & [child & _]]]
-  (let [{:keys [status db]} (tick db child)
+  [db [node-type options [child & _]] wmem]
+  (let [{:keys [status db]} (tick db child wmem)
         inverted-status (condp = status
                           :SUCCESS :FAILURE
                           :FAILURE :SUCCESS)]
@@ -250,14 +298,14 @@ pos?
 (defmethod ao/children :randomly [& _]
   #{1 2})
 
-(defmethod tick :randomly [db [node-type options & children]]
+(defmethod tick :randomly [db [node-type options & children] wmem]
   (case (count children)
     1 (if (< (rand) (:p options))
-        (tick db (first children))
+        (tick db (first children) wmem)
         (tick-failure db))
     2 (if (< (rand) (:p options))
-        (tick db (first children))
-        (tick db (second children)))))
+        (tick db (first children) wmem)
+        (tick db (second children) wmem))))
 
 ; CHOOSE
 ;
@@ -271,14 +319,11 @@ pos?
 (defmethod ao/children :choose [& _]
   :some)
 
-(defmethod tick :choose [db [node-type options & children]]
-  (tick db (rand-nth children)))
+(defmethod tick :choose [db [node-type options & children] wmem]
+  (tick db (rand-nth children) wmem))
 
-
-
-
-(defmethod tick :failure [db [node-type options & _]]
+(defmethod tick :failure [db [node-type options & _] wmem]
   (tick-failure db))
 
-(defmethod tick :success [db [node-type options & _]]
+(defmethod tick :success [db [node-type options & _] wmem]
   (tick-success db))

@@ -179,3 +179,77 @@ See `aido.core` source for definitions of the built in node-types.
 
 
 TODO: write [great documentation](http://jacobian.org/writing/what-to-write/)
+
+
+
+
+
+
+; TIMEOUT
+;
+; The :timeout node returns FAILURE after a certain amount of time has passed
+;
+; :duration <ticks>
+;
+
+[:timeout {:duration 5}]
+
+; WAIT
+;
+; The :wait node returns SUCCESS after a certain amount of time has passed
+;
+; :duration <ticks>
+
+[:wait]
+
+[:wait-until]
+
+[:if-time]
+
+
+;
+
+;
+; IF
+;
+; The :if node checks a condition. If the condition is true it runs the first child
+; otherwise it runs the second child if specified.
+;
+; Parameters
+; :condition <exp>
+;
+; Returns
+; SUCCESS if either child is executed and returns SUCCESS
+; FAILURE if either child is executed and returns FAILURE or if the condition fails and no second child is specified
+
+[:if {:condition ...}
+ ...
+ ...]
+
+; WAIT-UNTIL
+;
+; The :wait-until node executes until the time condition is satisifed
+;
+; Parameters
+; :
+;
+; Returns
+; SUCCESS
+; FAILURE -
+
+
+
+
+Because functions are not allowed in EDN the use of inline functions is not
+permitted however functions can be supplied for parameters using a set of
+named functions that are registered, in advance, with the compiler`.
+
+To distinguish from regular keyword arguments functions are specified as
+keywords in the `fn` namespace, e.g.
+
+    [:loop {:count [:fn/random 5]}
+      ...]
+      
+Where the `random` function is specified to the compiler as, for example,
+
+    {:random (fn [n] (inc (rand n)))}
