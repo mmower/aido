@@ -3,9 +3,6 @@
 `aido` stands for "AI do" and is a behaviour tree library suitable
 for implementing AI game behaviour.
 
-`aido` is based on reading about a number of implementations of behaviour trees
-and modular behaviour trees.
-
 `aido` behaviour trees are implemented as Clojure data structures much in the
 style of hiccup markup. As such they can be implemented in EDN notation.
 
@@ -179,35 +176,6 @@ See `aido.core` source for definitions of the built in node-types.
 
 
 TODO: write [great documentation](http://jacobian.org/writing/what-to-write/)
-
-
-
-
-
-
-; TIMEOUT
-;
-; The :timeout node returns FAILURE after a certain amount of time has passed
-;
-; :duration <ticks>
-;
-
-[:timeout {:duration 5}]
-
-; WAIT
-;
-; The :wait node returns SUCCESS after a certain amount of time has passed
-;
-; :duration <ticks>
-
-[:wait]
-
-[:wait-until]
-
-[:if-time]
-
-
-;
 
 ;
 ; IF
