@@ -1,7 +1,22 @@
 # aido
 
 `aido` stands for "AI do" and is a behaviour tree library suitable
-for implementing AI game behaviour.
+for implementing AI behaviours into games or applications. It could be
+used to model the behaviour of a game character or for a chabot to
+control the different responses it might employ.
+
+I won't introduce behaviour trees here (see
+[Google](https://www.google.co.uk/search?safe=off&dcr=0&source=hp&q=introduction+to+behaviour+trees&oq=introduction+to+behaviour+trees))
+beyond the basics. A behaviour tree is a tree-like data structure that
+specifies conditions we are interested in, actions that might be taken
+in responsento a given set of conditions, and some control flow mechanisms 
+hat govern how the tree "makes decisions".
+
+Those heart of the control flow is the **sequence** and the **selector** and
+the notion that any element of the behaviour tree either results in **success**
+or **failure**. In particular, a sequence considers each of its children until
+one of them fails while a selector selects among its children until one
+succeeds. From such a simple premise quite complex behaviours can emerge.
 
 `aido` behaviour trees are implemented as Clojure data structures much in the
 style of Hiccup markup. As such they can be implemented in EDN notation.
@@ -10,11 +25,12 @@ The structure of a behaviour is
 
     [:ns/keyword {options}* children*]
     
-The core `aido` behaviours do not have a namespace prefix. Domain specific behaviours
-are recommended to be namespaced.
+The core `aido` behaviours do not have a namespace prefix. Domain specific
+behaviours are recommended to be namespaced.
 
-It is recommended that behaviours that form conditions should have a name with a `?` suffix
-and that behaviours that represent actions have a `!` name suffix.
+It is recommended that behaviours that form conditions should have a name
+with a `?` suffix and that behaviours that represent actions have a `!` name
+suffix.
 
 Examples
 
