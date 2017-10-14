@@ -63,7 +63,11 @@
 
 ; The tick method has the signature
 ;
-; [db [node-type options [& children]]]
+; [db node]
+;
+; where node can be destructured into
+;
+; [node-type options & children]
 ;
 ; db is the persistent database that conditions and actions can query about the domain
 ; node-type is the behaviour node type keyword (e.g. :selector)
@@ -74,6 +78,16 @@
 (defmulti tick
           "The tick function sends the tick to a node of different types."
           tick-node-type)
+
+
+(defn run-tick
+  "The run-tick function is a top-level function for sending a tick to a node tree. Its purpose is to
+  temporarily assocation a map of working definitions for use during that tick into a well-known part of
+  the working memory database and then remove them once the tick is complete. The map is associated
+  under the key `:aido/wmem`."
+  [db node local-defs]
+  (let [{:keys [status db]} (tick (assoc db :aido/wmem local-defs) node)]
+    (tick-result status (dissoc db :aido/wmem))))
 
 ; Core node types
 

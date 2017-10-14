@@ -115,6 +115,22 @@ whether the child succeeds.
 The NEVER node expects one child that it ticks and then fails regardless of
 whether the child fails.
 
+## Not yet implemented
+
+The following are extensions of the choice idea that provide for non-uniform behaviour. They are given
+as separate nodes but, in practice, could be implemented by extending the existing `:choice` node type.
+
+### :weighted-choice
+
+The `:weighted-choice` node randomly selects a child to tick based on some weighting algorithm.
+
+### :choice-without-repetition
+
+The `:choice-without-repetition` node randomly selects a child to tick excluding children that
+have been ticked before. This is then a stateful node that uses the working memory to track which
+of its children have already been ticked. We may anticipate that a requirement might exist for
+some way to reset the memory.
+
 ## Extending AIDO
 
 Behaviours in AIDO are defined by creating new tick node types. A node type is defined by implementing 3
