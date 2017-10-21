@@ -4,6 +4,15 @@
             [aido.options :as ao]
             [aido.compile :as ac]))
 
+(defn set-working-memory
+  "Store a set of assignments in a fixed location, namespaced to aido."
+  [db assigns]
+  (assoc db :aido/wmem assigns))
+
+(defn get-working-memory [db key]
+  "Get one of the namespaced working-memory assignments."
+  (get-in db [:aido/wmem key]))
+
 (def SUCCESS :success)
 (def FAILURE :failure)
 (def RUNNING :running)
