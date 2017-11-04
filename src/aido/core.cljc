@@ -88,15 +88,22 @@
           "The tick function sends the tick to a node of different types."
           tick-node-type)
 
+(defn tick-child [db child]
+  "The tick function should not be called directly because the child may contain unrealised options.
+  Calling tick-child ensures options are realised before the child tick function is called."
+  (tick db (ac/realise-options child)))
 
 (defn run-tick
   "The run-tick function is a top-level function for sending a tick to a node tree. Its purpose is to
   temporarily assocation a map of working definitions for use during that tick into a well-known part of
   the working memory database and then remove them once the tick is complete. The map is associated
   under the key `:aido/wmem`."
-  [db node local-defs]
-  (let [{:keys [status db]} (tick (assoc db :aido/wmem local-defs) node)]
-    (tick-result status (dissoc db :aido/wmem))))
+  ([db tree]
+    (run-tick db tree {}))
+  ([db tree local-defs]
+   (let [{:keys [status db]} (tick-child (assoc db :aido/wmem local-defs) tree)]
+     (tick-result status (dissoc db :aido/wmem)))))
+
 
 ; Core node types
 
@@ -120,7 +127,7 @@
          n  0]
     (if (= count n)
       (tick-success db)
-      (let [result (tick db child)]
+      (let [result (tick-child db child)]
         (if (has-failed? result)
           result
           (recur (:db result) (inc n)))))))
@@ -142,7 +149,7 @@
          n  0]
     (if (= n count)
       (tick-failure db)
-      (let [result (tick db child)]
+      (let [result (tick-child db child)]
         (if (has-succeeded? result)
           result
           (recur (:db result) (inc n)))))))
@@ -172,7 +179,7 @@ pos?
 (defmethod tick :parallel [db [node-type {:keys [mode how-many]} & children]]
   (let [c            (count children)
         {:keys [success failure db]} (reduce (fn [{:keys [success failure db]} child]
-                                               (let [result (tick db child)]
+                                               (let [result (tick-child db child)]
                                                  {:success (if (has-succeeded? result) (inc success) success)
                                                   :failure (if (has-failed? result) (inc failure) failure)
                                                   :db      (:db result)})
@@ -198,7 +205,7 @@ pos?
   (loop [db        db
          child     (first children)
          remaining (rest children)]
-    (let [{:keys [status db] :as rval} (tick db child)]
+    (let [{:keys [status db] :as rval} (tick-child db child)]
       (if (has-succeeded? rval)
         rval
         (if (empty? remaining)
@@ -227,7 +234,7 @@ pos?
          child     (first children)
          remaining (rest children)]
     (if (< (rand) p)
-      (let [{:keys [status db] :as rval} (tick db child)]
+      (let [{:keys [status db] :as rval} (tick-child db child)]
         (if (has-succeeded? rval)
           rval
           (if (empty? remaining)
@@ -250,12 +257,11 @@ pos?
 
 (defmethod tick :sequence [db [node-type options & children]]
   (reduce (fn [{:keys [db]} child]
-            (let [result (tick db child)]
+            (let [result (tick-child db child)]
               (if (or (in-progress? result) (has-failed? result))
                 (reduced result)
                 result))
             ) {:db db} children))
-
 
 ; ALWAYS
 ;
@@ -267,7 +273,7 @@ pos?
 
 (defmethod tick :always
   [db [node-type options [child & _]]]
-  (let [{:keys [status db]} (tick db child)]
+  (let [{:keys [status db]} (tick-child db child)]
     (tick-success db)))
 
 ; NEVER
@@ -280,7 +286,7 @@ pos?
 
 (defmethod tick :never
   [db [node-type options [child & _]]]
-  (let [{:keys [status db]} (tick db child)]
+  (let [{:keys [status db]} (tick-child db child)]
     (tick-failure db)))
 
 ; INVERT
@@ -293,7 +299,7 @@ pos?
 
 (defmethod tick :invert
   [db [node-type options [child & _]]]
-  (let [{:keys [status db]} (tick db child)
+  (let [{:keys [status db]} (tick-child db child)
         inverted-status (condp = status
                           :SUCCESS :FAILURE
                           :FAILURE :SUCCESS)]
@@ -323,11 +329,11 @@ pos?
 (defmethod tick :randomly [db [node-type options & children]]
   (case (count children)
     1 (if (< (rand) (:p options))
-        (tick db (first children))
+        (tick-child db (first children))
         (tick-failure db))
     2 (if (< (rand) (:p options))
-        (tick db (first children))
-        (tick db (second children)))))
+        (tick-child db (first children))
+        (tick-child db (second children)))))
 
 ; CHOOSE
 ;
@@ -342,7 +348,7 @@ pos?
   :some)
 
 (defmethod tick :choose [db [node-type options & children]]
-  (tick db (rand-nth children)))
+  (tick-child db (rand-nth children)))
 
 (defmethod tick :failure [db [node-type options & _]]
   (tick-failure db))

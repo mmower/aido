@@ -8,10 +8,10 @@
 ; In the 'nodes' namespaces we define some conditions and actions that can be used for behaviour testing.
 
 (defn tick-status [db tree]
-  (:status (tick db tree)))
+  (:status (run-tick db tree {})))
 
 (defn tick-db [db tree]
-  (:db (tick db tree)))
+  (:db (run-tick db tree {})))
 
 (def t1 (aidoc/compile [:present? {:key :foo}]))
 (expect FAILURE (tick-status {} t1))
@@ -84,6 +84,17 @@
 
 #_(expect 0.1 (with-redefs [rand (constantly 0.1)]
                 (rand)))
+
+
+; Function options
+
+(def op-fns {:x (constantly 99)})
+
+(def t10 (aidoc/compile [:test? {:key :foo :val [:fn/x] :oper =}] op-fns))
+
+(expect SUCCESS (tick-status {:foo 99} t10))
+(expect FAILURE (tick-status {:foo 0} t10))
+
 
 
 

@@ -1,4 +1,6 @@
-# aido
+# aido -- v0.3.0
+
+## Introduction
 
 `aido` stands for "AI do" and is a behaviour tree library suitable
 for implementing AI behaviours into games or applications. It could be
@@ -17,6 +19,8 @@ the notion that any element of the behaviour tree either results in **success**
 or **failure**. In particular, a sequence considers each of its children until
 one of them fails while a selector selects among its children until one
 succeeds. From such a simple premise quite complex behaviours can emerge.
+
+## Specifying a tree
 
 `aido` behaviour trees are implemented as Clojure data structures much in the
 style of Hiccup markup. As such they can be implemented in EDN notation.
@@ -42,12 +46,40 @@ Examples
       [:map/ping-random-location!]]
       
     [:succeeds]
-
-A behaviour can optionally specify a map of options that will be passed to the
-appropriate tick function.
-
+    
 A behaviour can have zero or more child behaviours. For example the `[:selector]`
 and `[:sequence]` behaviour expect at least one child.
+
+## Options
+
+A behaviour can optionally specify a map of options that will be passed to the
+appropriate tick function. For example the `loop` behaviour uses an option `count` to
+specify how many times the loop should iterate.
+
+Because functions are not permitted in EDN there is a way to specify functions that
+ should be used to dynamically generate option values.
+ 
+To implement a fully dynamic option that will be re-evaluated each time the behaviour
+receives a tick specify the option like this:
+
+    [:loop {:count [:fn/rand 5]} ...]
+    
+Any vector with a first element being a keyword in the `fn` namespace will be treated
+as a dynamic option and will call the named function (in this case `rand`) as long
+as an appropriate function has been registered with the compiler (see below).
+
+Alternatively:
+
+    [:loop {:count [:ifn/rand 5]} ...]
+   
+When a function is specified in the `ifn` namespace the option value will be calculated
+when the tree is being compiled. Therefore it will be set dynamically once, at compile
+time, but remain the same on each tick of the tree.
+    
+Functions are specified by passing an optional map to `compile` for example to satisfy the
+trees above you might use:
+
+    (aido.compile/compile tree {:rand rand-int})
     
 ## Return values and flow control
 
@@ -69,72 +101,93 @@ terminate with the `RUNNING` status if any of its children returns `RUNNING`.
 
 Flow control is primilarily implemented in terms of `:selector` and `:sequence` behaviours.
 
+## Usage
+
+In basic usage you must compile a behaviour tree using `aido.compile/compile` and then to run it
+use the `aido.core/run-tick` function. It is not recommend to call the `tick` function directly.
+
+    (ns 'aido.example
+      (:require [aido.core :as ai]
+                [aido.compile :as ac]))
+    
+    (let [tree (ac/compile [:selector
+                             [:sequence
+                               [:even? {:fn/coin}]
+                               [:heads!]
+                             [:tails!]]]) {:coin #(< (rand) 0.5)})
+          db*  {:foo :bar}]
+      (let [{:keys [db status]} (ai/run-tick db* tree)]
+        (if (= ai/SUCCESS status)
+          ; extract from or use db
+          ; otherwise...))
+
 ## Built-ins
 
 ### :selector
 
-The SELECTOR node executes its children in turn until one of them succeeds at
-which point execution stops and the SELECTOR succeeds. If none of the children
-suceeds the SELECTOR fails.
+The `:selector` node executes its children in turn until one of them succeeds at
+which point execution stops and the `:selector` succeeds. If none of the children
+suceeds the `:selector` fails.
 
 ### :sequence
 
-The SEQUENCE node executes its children in turn. If a child fails execution
-stops and the SEQUENCE fails. If all of the children succeed the SEQUENCE
+The `:sequence` node executes its children in turn. If a child fails execution
+stops and the `:sequence` fails. If all of the children succeed the `:sequence`
 succeeds.
 
-### :sequence-p
+### :selector-p
 
 ### :loop
 
-The LOOP node executes a single child a specified number of times. It is
+The `:loop` node executes a single child a specified number of times. It is
 successful if it completes the specified iterations. If the child fails
-then the LOOP fails.
+then the `:loop` fails.
 
 ### :loop-until-success
 
-The LOOP-UNTIL-SUCCESS node executes a child up to a specified number of times.
-If the child succeeds then the LOOP-UNTIL-SUCCESS succeeds. Otherwise, after
-the specified number of iterations the LOOP-UNTIL-SUCCESS fails.
+The `:loop-until-success` node executes a child up to a specified number of times.
+If the child succeeds then the `:loop-until-success` succeeds. Otherwise, after
+the specified number of iterations the `:loop-until-success` fails.
 
 ### :parallel
 
-The PARALLEL node executes all of its children.
+The `:parallel` node executes all of its children.
 
 ### :randomly
 
-The RANDOMLY node operates in one of two modes depending on whether it has
+The `:randomly` node operates in one of two modes depending on whether it has
 one or two children.
 
-With one child RANDOMLY evaluates the child if the p test passes and succeeds
-or fails if the child succeeds or fails.
+With one child `:randomly` evaluates the child if the p test passes and succeeds
+or fails if the child succeeds or fails. If the `p` test fails `:randomly` fails.
 
-With two children RANDOMLY evaluates the first child if the p test passes or
-the second child if it fails. RANDOMLY succeeds or fails based on the child
-succeeding or failing. 
+With two children `:randomly` evaluates the first child if the p test passes or
+the second child if it fails. `:randomly` succeeds or fails based on the selected
+child succeeding or failing. 
 
 ### :choose
 
-The CHOOSE node takes one or more children and, when evaluated, randomly
-selects one child and ticks it. CHOOSE succeeds or fails if the child
+The `:choose` node takes one or more children and, when evaluated, randomly
+selects one child and ticks it. `:choose` succeeds or fails if the child
 succeeds or fails.
 
 ### :invert
 
 ### :always
 
-The ALWAYS node expects one child that it ticks and then suceeds regardless of
+The `:always` node expects one child that it ticks and then suceeds regardless of
 whether the child succeeds.
 
 ### :never
 
-The NEVER node expects one child that it ticks and then fails regardless of
+The `:never` node expects one child that it ticks and then fails regardless of
 whether the child fails.
 
 ## Not yet implemented
 
 The following are extensions of the choice idea that provide for non-uniform behaviour. They are given
-as separate nodes but, in practice, could be implemented by extending the existing `:choice` node type.
+as separate nodes but, in practice, could be implemented by extending the existing `:choice` node type
+with additional options.
 
 ### :weighted-choice
 
