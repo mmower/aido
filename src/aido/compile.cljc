@@ -42,7 +42,7 @@
   values that can be serialised."
   [fns opts]
   (reduce (fn [opts* [opt val]]
-            (let [actual (if (vector? val)
+            (let [actual (if (and (vector? val) (keyword? (first val)))
                            (let [op    (first val)
                                  op-ns (namespace op)
                                  op-fn (get fns (keyword (name op)))]
