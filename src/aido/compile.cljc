@@ -81,10 +81,10 @@
      (throw (ex-info (str "Unexpected input: " tree) {}))
      (let [[node-type & tail] tree]
        (if-not (keyword? node-type)
-         (throw (ex-info (str "Expected behaviour keyword: " node-type " in tree:" tree) {})))
+         (throw (ex-info (str "Expected behaviour keyword: " node-type " (" (type node-type) ") in tree:" tree) {})))
        (let [req-opts     (ao/options tree)
              req-children (ao/children tree)
-             [opts children] (ao/parse-options tail :required req-opts)
+             [opts children] (ao/parse-options tree tail :required req-opts)
              opts*        (->> opts
                                (replace-fn-options opt-fns)
                                (merge {:id (next-auto-id)}))]

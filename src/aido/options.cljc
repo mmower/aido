@@ -9,7 +9,7 @@
               rval
               (conj rval option))) [] required))
 
-(defn parse-options [args & {:keys [required] :or {required []}}]
+(defn parse-options [node args & {:keys [required] :or {required []}}]
   "Returns a tuple containing an options map and a sequence of arguments. Where the first
   passed in argument is a map returns that as the options map, otherwise returns an empty
   options map. Optionally verifies the options contain specified keys."
@@ -23,7 +23,7 @@
         missing        (missing-options options required)]
     (if (empty? missing)
       [options remaining-args]
-      (throw-error (str "Required options missing: " (str/join ", " missing))))))
+      (throw-error (str "Parsing tree [" node "] required options missing: " (str/join ", " missing))))))
 
 (defmulti options
           "The options function specifies the expected options for a given node type."
