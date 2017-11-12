@@ -8,25 +8,15 @@
 ;
 (def ^:private id-source (atom 0))
 
-(defn walk [inner outer form]
-  (if (vector? form)
-    (outer (mapv inner form))
-    (outer form)))
-
-(defn postwalk
-  "A variation on clojure.walk/postwalk that uses our custom walk function."
-  [f form]
-  (walk (partial postwalk f) f form))
-
-(defn verify-children [required actual]
+(defn verify-children [node required actual]
   (let [child-count (count actual)]
     (cond
-      (set? required) (if-not (get required child-count) (throw (ex-info (str "children required:" required " actual:" child-count) {})))
-      (= 0 required) (if (not= child-count 0) (throw (ex-info (str "children required:0 actual:" child-count) {})))
-      (= 1 required) (if (not= child-count 1) (throw (ex-info (str "children required:1 actual:" child-count) {})))
-      (= :some required) (if (< child-count 1) (throw (ex-info (str "children required:>1 actual:0") {})))
+      (set? required) (if-not (get required child-count) (throw (ex-info (str node " -- children required:" required " actual:" child-count) {})))
+      (= 0 required) (if (not= child-count 0) (throw (ex-info (str node " -- children required:0 actual:" child-count) {})))
+      (= 1 required) (if (not= child-count 1) (throw (ex-info (str node " -- children required:1 actual:" child-count) {})))
+      (= :some required) (if (< child-count 1) (throw (ex-info (str node " -- children required:>1 actual:0") {})))
       (= :any required) nil
-      true (throw (ex-info (str "invalid children specified:" required) {})))))
+      true (throw (ex-info (str node " -- invalid children specified:" required) {})))))
 
 (defn replace-fn-options
   "Given a map of options replace-fn-options replaces those that are intended to be dynamic. A dynamic
@@ -69,27 +59,34 @@
                              (assoc opts* opt val))) {} options)]
     (into [node-type options*] children)))
 
-(defn compile
-  ([btree]
-   (compile btree {}))
-  ([btree fns]
-   (postwalk (fn [node]
-               (if (vector? node)
-                 (let [[node-type & args] node
-                       id           (swap! id-source inc)
-                       req-opts     (ao/options node)
-                       req-children (ao/children node)]
-                   (try
-                     (let [[opts children] (ao/parse-options args :required req-opts)
-                           new-opts (if (contains? opts :id) ; don't override a manually assigned :id
-                                      opts
-                                      (assoc opts :id id))
-                           new-opts* (replace-fn-options fns new-opts)]
-                       (verify-children req-children children)
-                       (into [node-type new-opts*] children))
-                     #?(:clj  (catch Exception e
-                                (throw (ex-info (str "While processing: " node) {} e)))
-                        :cljs (catch :default e
-                                (throw (ex-info (str "While processing: " node) {} e))))))
-                 node)) btree)))
+(defn next-auto-id []
+  (swap! id-source inc))
 
+(comment
+  (if-not (empty? tail)
+    (if (map? (first tail))
+      (let [[options & children] tail]
+        (if (empty? children)
+          [node-type (merge {:id (next-auto-id)} options)]
+          [node-type (merge {:id (next-auto-id)} options) (mapv compile2 children)]))
+      [node-type {:id (next-auto-id)} (mapv compile2 tail)]) ; assigned auto-id and process the kids
+    [node-type {:id (next-auto-id)}]                   ; no children, just add the auto-id
+    ))
+
+(defn compile
+  ([tree]
+    (compile tree {}))
+  ([tree opt-fns]
+   (if-not (vector? tree)
+     (throw (ex-info (str "Unexpected input: " tree) {}))
+     (let [[node-type & tail] tree]
+       (if-not (keyword? node-type)
+         (throw (ex-info (str "Expected behaviour keyword: " node-type " in tree:" tree) {})))
+       (let [req-opts     (ao/options tree)
+             req-children (ao/children tree)
+             [opts children] (ao/parse-options tail :required req-opts)
+             opts*        (->> opts
+                               (replace-fn-options opt-fns)
+                               (merge {:id (next-auto-id)}))]
+         (verify-children tree req-children children)
+         (into [node-type opts*] (map compile children)))))))

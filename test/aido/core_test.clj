@@ -96,5 +96,12 @@
 (expect FAILURE (tick-status {:foo 0} t10))
 
 
+; Check that walking doesn't stray into options
+
+(def t11 (aidoc/compile [:selector
+                          [:sequence [:test? {:key [:foo :bar] :val :baz :oper =}]]
+                          [:sequence [:test? {:key :foo :val [:bar :baz] :oper =}]]]))
+; we check we don't throw here by defining this
+
 
 
