@@ -75,17 +75,6 @@
 (defn next-auto-id []
   (swap! id-source inc))
 
-(comment
-  (if-not (empty? tail)
-    (if (map? (first tail))
-      (let [[options & children] tail]
-        (if (empty? children)
-          [node-type (merge {:id (next-auto-id)} options)]
-          [node-type (merge {:id (next-auto-id)} options) (mapv compile2 children)]))
-      [node-type {:id (next-auto-id)} (mapv compile2 tail)]) ; assigned auto-id and process the kids
-    [node-type {:id (next-auto-id)}]                        ; no children, just add the auto-id
-    ))
-
 (defn compile
   ([tree]
    (compile tree {}))

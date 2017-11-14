@@ -1,4 +1,4 @@
-(defproject sandbags/aido "0.3.2"
+(defproject sandbags/aido "0.3.3"
   :description "AIDO: AI do - behaviour tree library for Clojure and ClojureScript"
   :url "http://mattmower.com/aido"
   :license {:name "Eclipse Public License"
