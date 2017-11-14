@@ -45,3 +45,10 @@
   [db [node-type {:keys [key] :as options} _]]
   #_(println "counter:" key " <" (get db key))
   (ai/tick-success (update db key (fnil inc 0))))
+
+
+(defmethod ao/children :parent-2 [& _] 2)
+
+(defmethod ao/children :parent-+ [& _] :+)
+
+(defmethod ao/children :parent-set [& _] #{2 3})

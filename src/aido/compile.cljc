@@ -9,14 +9,27 @@
 (def ^:private id-source (atom 0))
 
 (defn verify-children [node required actual]
-  (let [child-count (count actual)]
-    (cond
-      (set? required) (if-not (get required child-count) (throw (ex-info (str node " -- children required:" required " actual:" child-count) {})))
-      (= 0 required) (if (not= child-count 0) (throw (ex-info (str node " -- children required:0 actual:" child-count) {})))
-      (= 1 required) (if (not= child-count 1) (throw (ex-info (str node " -- children required:1 actual:" child-count) {})))
-      (= :some required) (if (< child-count 1) (throw (ex-info (str node " -- children required:>1 actual:0") {})))
-      (= :any required) nil
-      true (throw (ex-info (str node " -- invalid children specified:" required) {})))))
+  (let [child-count (count actual)
+        passes      (cond (set? required) (get required child-count)
+                          (number? required) (= required child-count)
+                          (= :some required) (> child-count 0)
+                          (= :+ required) (> child-count 0)
+                          (= :any required) true
+                          (= :* required) true
+                          :else (throw (ex-info "Invalid children specification" {:node      node
+                                                                                  :specifier required})))]
+    (if-not passes
+      (let [message (str "Incorrect children passed! expected:"
+                         required
+                         " saw:"
+                         child-count
+                         " for behaviour:\""
+                         node
+                         "\"")]
+        (throw (ex-info message {:node-type (first node)
+                                 :children  actual
+                                 :expected  required
+                                 :actual    child-count}))))))
 
 (defn replace-fn-options
   "Given a map of options replace-fn-options replaces those that are intended to be dynamic. A dynamic
@@ -70,12 +83,12 @@
           [node-type (merge {:id (next-auto-id)} options)]
           [node-type (merge {:id (next-auto-id)} options) (mapv compile2 children)]))
       [node-type {:id (next-auto-id)} (mapv compile2 tail)]) ; assigned auto-id and process the kids
-    [node-type {:id (next-auto-id)}]                   ; no children, just add the auto-id
+    [node-type {:id (next-auto-id)}]                        ; no children, just add the auto-id
     ))
 
 (defn compile
   ([tree]
-    (compile tree {}))
+   (compile tree {}))
   ([tree opt-fns]
    (if-not (vector? tree)
      (throw (ex-info (str "Unexpected input: " tree) {}))

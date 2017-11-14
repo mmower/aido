@@ -99,9 +99,35 @@
 ; Check that walking doesn't stray into options
 
 (def t11 (aidoc/compile [:selector
-                          [:sequence [:test? {:key [:foo :bar] :val :baz :oper =}]]
-                          [:sequence [:test? {:key :foo :val [:bar :baz] :oper =}]]]))
+                         [:sequence [:test? {:key [:foo :bar] :val :baz :oper =}]]
+                         [:sequence [:test? {:key :foo :val [:bar :baz] :oper =}]]]))
 ; we check we don't throw here by defining this
 
+; Check child count verification, should pass with 2
 
+; Requires exactly 2 children. Should not raise an exception
+(aidoc/compile [:parent-2
+                [:success]
+                [:success]])
+
+; Should raise an exception
+(expect clojure.lang.ExceptionInfo (aidoc/compile [:parent-2]))
+(expect clojure.lang.ExceptionInfo (aidoc/compile [:parent-2 [:success]]))
+(expect clojure.lang.ExceptionInfo (aidoc/compile [:parent-2 [:success] [:success] [:success]]))
+
+; Requires at least one child. Should not raise an exception
+(aidoc/compile [:parent-+
+                [:success]])
+
+; Should raise an exception
+(expect clojure.lang.ExceptionInfo (aidoc/compile [:parent-+]))
+
+; Requries 2 or 3 children. Should not raise an exception
+(aidoc/compile [:parent-set [:success] [:success]])
+(aidoc/compile [:parent-set [:success] [:success] [:success]])
+
+; Should raise an exception
+(expect clojure.lang.ExceptionInfo (aidoc/compile [:parent-set]))
+(expect clojure.lang.ExceptionInfo (aidoc/compile [:parent-set [:success]]))
+(expect clojure.lang.ExceptionInfo (aidoc/compile [:parent-set [:success] [:success] [:success] [:success]]))
 
