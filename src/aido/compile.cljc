@@ -31,6 +31,21 @@
                                  :expected  required
                                  :actual    child-count}))))))
 
+; a dynamic option value looks like: [:aido/fn ..] or [:aido/db ..]
+
+(defn replace-dynamic-option
+  "Given an option opt val where val is of the form [:aido/... ...] perform a dynamic replacement."
+  [fns opts [opt val]]
+  (let [opts* (assoc opts opt val)]
+    (if (and (vector? val) (keyword? (first val)) (= "aido" (namespace (first val))))
+      (let [op (keyword (name (first val)))]
+        (case op
+          :db (let [key-path (rest val)]
+                (vary-meta opts* update :db-opts assoc opt (fn [db] (get-in db key-path))))
+          :fn (let [[fn-id & args] (rest val)]
+                (vary-meta opts* update :fn-opts assoc opt (fn [] (apply (get fns fn-id) args))))))
+      opts*)))
+
 (defn replace-fn-options
   "Given a map of options replace-fn-options replaces those that are intended to be dynamic. A dynamic
   option is an option whose value is a vector of the form [:fn/name ...] or [:fn*/name ...]. In this
@@ -44,36 +59,36 @@
   be regenerated each time the tree is deserialised. Compile time replacements are replacements by
   values that can be serialised."
   [fns opts]
-  (reduce (fn [opts* [opt val]]
-            (let [actual (if (and (vector? val) (keyword? (first val)))
-                           (let [op    (first val)
-                                 op-ns (namespace op)
-                                 op-fn (get fns (keyword (name op)))]
-                             (cond
-                               ; [:fn/foo ...] remains [:fn/foo ...] with an attached function
-                               ; in it's metadata under the :fn key that, when called, returns
-                               ; the appropriate value for the option
-                               (and (= "fn" op-ns) op-fn) (with-meta val {:fn (fn [] (apply op-fn (rest val)))})
-                               ; [:ifn/foo ...] is translated into the value of applying the
-                               ; function to its arguments. This means that the value is immediately
-                               ; replaced in the compiled behaviour tree and [:ifn*/foo ...] is lost
-                               (and (= "ifn" op-ns) op-fn) (apply op-fn (rest val))
-                               :else val))
-                           val)]
-              (assoc opts* opt actual))) {} opts))
+  (let [rfn (partial replace-dynamic-option fns)]
+    (reduce rfn {} opts)))
+
+(defn next-auto-id
+  "Return next sequential id."
+  []
+  (swap! id-source inc))
+
+(defn assign-auto-id
+  "Given a map object, if it does not have a value for key :id then assign an auto-id value."
+  [mo]
+  (if (:id mo)
+    mo
+    (assoc mo :id (next-auto-id))))
+
+(defn- realise-fn-opt [opts [opt f]]
+  (assoc opts opt (f)))
+
+(defn- realise-db-opt [db opts [opt f]]
+  (assoc opts opt (f db)))
 
 (defn realise-options
   "Given an options map where some options may represent dynamic function values (see replace-fn-options)
-  of the form [:fn/foo ...] replace the function values with the result of the function applications."
-  [[node-type options & children]]
-  (let [options* (reduce (fn [opts* [opt val]]
-                           (if-let [f (:fn (meta val))]
-                             (assoc opts* opt (f))
-                             (assoc opts* opt val))) {} options)]
+   'realise' those dynamic values and pass them instead."
+  [db [node-type options & children]]
+  (let [{:keys [fn-opts db-opts]} (meta options)
+        options* (as-> options $
+                       (reduce realise-fn-opt $ fn-opts)
+                       (reduce (partial realise-db-opt db) $ db-opts))]
     (into [node-type options*] children)))
-
-(defn next-auto-id []
-  (swap! id-source inc))
 
 (defn compile
   ([tree]
@@ -89,6 +104,6 @@
              [opts children] (ao/parse-options tree tail :required req-opts)
              opts*        (->> opts
                                (replace-fn-options opt-fns)
-                               (merge {:id (next-auto-id)}))]
+                               (assign-auto-id))]
          (verify-children tree req-children children)
          (into [node-type opts*] (map compile children)))))))

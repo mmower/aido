@@ -1,4 +1,6 @@
-# aido -- v0.3.0
+# aido
+
+[![Clojars Project](https://img.shields.io/clojars/v/sandbags/aido.svg)](https://clojars.org/sandbags/aido)
 
 ## Introduction
 
@@ -14,11 +16,12 @@ specifies conditions we are interested in, actions that might be taken
 in responsento a given set of conditions, and some control flow mechanisms 
 hat govern how the tree "makes decisions".
 
-Those heart of the control flow is the **sequence** and the **selector** and
-the notion that any element of the behaviour tree either results in **success**
-or **failure**. In particular, a sequence considers each of its children until
-one of them fails while a selector selects among its children until one
-succeeds. From such a simple premise quite complex behaviours can emerge.
+Those heart of the control flow are behaviours such as `sequence` and `selector`
+ and the notion that any element of the behaviour tree either results in
+ **success** or **failure**. In particular, a sequence considers each of its
+ children until one of them fails while a selector selects among its children
+ until one succeeds. From such a simple premise quite complex behaviours can
+ emerge.
 
 ## Specifying a tree
 
@@ -32,50 +35,66 @@ The structure of a behaviour is
 The core `aido` behaviours do not have a namespace prefix. Domain specific
 behaviours are recommended to be namespaced.
 
-It is recommended that behaviours that form conditions should have a name
-with a `?` suffix and that behaviours that represent actions have a `!` name
-suffix.
+The author has developed a convention that behaviours that form conditions should
+have a `?` suffix, e.g. `:time/after?` while behaviours that represent actions
+with side-effects should have a `!` suffix, e.g. `:beverage/drink!`.
 
-Examples
-
-    [:sequence
-      [:time/after? {:t :teatime}]
-      [:beverage/drink! {:beverage :tea}]]
-      
-    [:loop {:count 5}
-      [:map/ping-random-location!]]
-      
-    [:succeeds]
-    
 A behaviour can have zero or more child behaviours. For example the `[:selector]`
-and `[:sequence]` behaviour expect at least one child.
+and `[:sequence]` behaviour expect at least one child although, in practice, both
+only make sense with multiple children.
 
+## Example
+
+    [:selector
+      [:sequence
+        [:time/after? {:t :teatime}]
+        [:beverage/drink! {:beverage :tea}]
+      [:actor/say! {:message "Oh, how I wish it was time for tea!"}]
+      
+In this example the `:selector` runs and ticks its first child, the `:sequence`.
+The `:sequence` ticks each of its children in turn. If `:time/after?` fails then
+the `:sequence` fails and the `:selector` goes on to tick `:actor/say!`. On the
+other hand if it succeeds then the `:beverage/drink!` child is ticked and, we
+assume, succeeds leading to the `:sequence` succeeding and the `:selector`
+succeeding without ticking the `:actor/say!` child.
+      
 ## Options
 
-A behaviour can optionally specify a map of options that will be passed to the
-appropriate tick function. For example the `loop` behaviour uses an option `count` to
-specify how many times the loop should iterate.
+In the example above we see that `:time/after?`, `:beverage/drink!`, and `:actor/say!`
+all specify a map of options. These are assumed to be understood by the implementation
+of the behaviour in question. The `:selector` and `:sequence` do not have options although
+some of the built-in behaviours, e.g. `loop` do. In the case of `:loop` it has a `count`
+ option to specify how many times the loop should iterate.
 
-Because functions are not permitted in EDN there is a way to specify functions that
- should be used to dynamically generate option values.
- 
-To implement a fully dynamic option that will be re-evaluated each time the behaviour
-receives a tick specify the option like this:
+Sometimes it is advantageous to be able to specify options that are dynamic. aido offers
+two approaches:
 
-    [:loop {:count [:fn/rand 5]} ...]
+1. Specify a function value, the syntax for which is:
+
+    `[:aido/fn function-id arg1 ... argN]`
     
-Any vector with a first element being a keyword in the `fn` namespace will be treated
-as a dynamic option and will call the named function (in this case `rand`) as long
-as an appropriate function has been registered with the compiler (see below).
+    e.g.
 
-Alternatively:
+    `[:loop {:count [:aido/fn rand 5]} ...]`
 
-    [:loop {:count [:ifn/rand 5]} ...]
-   
-When a function is specified in the `ifn` namespace the option value will be calculated
-when the tree is being compiled. Therefore it will be set dynamically once, at compile
-time, but remain the same on each tick of the tree.
-    
+The `function-id` should correspond to a function registered with the compiler (see below).
+
+These functions are stand-alone and executed each time the beheaviour is ticked with
+the return value of the function being passed into the options maps.
+
+2. Specify a database key-path
+
+     `[:aido/db path1 ... pathN]`
+     
+     e.g.
+     
+     `[:loop {:count [:aido/db :settings :loop-count]]}]`
+     
+When the behaviour is ticked the appropriate value in the database will be passed in instead,
+this example would be conceptually equivalent to:
+
+      [:loop {:count (get-in db [:settings :loop-count])}]
+              
 Functions are specified by passing an optional map to `compile` for example to satisfy the
 trees above you might use:
 

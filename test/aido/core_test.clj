@@ -90,17 +90,25 @@
 
 (def op-fns {:x (constantly 99)})
 
-(def t10 (aidoc/compile [:test? {:key :foo :val [:fn/x] :oper =}] op-fns))
+(def t10 (aidoc/compile [:test? {:key :foo :val [:aido/fn :x] :oper =}] op-fns))
 
 (expect SUCCESS (tick-status {:foo 99} t10))
 (expect FAILURE (tick-status {:foo 0} t10))
 
+(comment (def t11 (aidoc/compile [:test? {:key :foo :val [:aido/ifn :x] :oper =}] op-fns))
+         (expect 99 (get-in t11 [1 :val])))
+
+; DB lookup options
+
+(def t12 (aidoc/compile [:equal? {:v1 99 :v2 [:aido/db :data]}]))
+(expect SUCCESS (tick-status {:data 99} t12))
+
 
 ; Check that walking doesn't stray into options
 
-(def t11 (aidoc/compile [:selector
-                         [:sequence [:test? {:key [:foo :bar] :val :baz :oper =}]]
-                         [:sequence [:test? {:key :foo :val [:bar :baz] :oper =}]]]))
+(aidoc/compile [:selector
+                [:sequence [:test? {:key [:foo :bar] :val :baz :oper =}]]
+                [:sequence [:test? {:key :foo :val [:bar :baz] :oper =}]]])
 ; we check we don't throw here by defining this
 
 ; Check child count verification, should pass with 2

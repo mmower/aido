@@ -3,6 +3,12 @@
             [aido.options :as ao]
             [aido.core :as ai]))
 
+(defmethod ao/options :equal? [& _] [:v1 :v2])
+
+(defmethod ai/tick :equal?
+  [db [node-type {:keys [v1 v2]} & _]]
+  (ai/tick-result (ai/succeed-if (= v1 v2)) db))
+
 (defmethod ao/options :present? [& _] [:key])
 
 (defmethod ai/tick :present?
