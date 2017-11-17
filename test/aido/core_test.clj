@@ -72,7 +72,6 @@
 
 
 
-
 ; SUCCESS
 
 (let [tree (aidoc/compile [:success])
@@ -82,26 +81,31 @@
 
 
 
-#_(expect 0.1 (with-redefs [rand (constantly 0.1)]
-                (rand)))
+
+(def t10 (aidoc/compile [:failure]))
+(expect FAILURE (tick-status {} t10))
+
+(def t11 (aidoc/compile [:success]))
+(expect SUCCESS (tick-status {} t11))
+
 
 
 ; Function options
 
 (def op-fns {:x (constantly 99)})
 
-(def t10 (aidoc/compile [:test? {:key :foo :val [:aido/fn :x] :oper =}] op-fns))
+(def t12 (aidoc/compile [:test? {:key :foo :val [:aido/fn :x] :oper =}] op-fns))
 
-(expect SUCCESS (tick-status {:foo 99} t10))
-(expect FAILURE (tick-status {:foo 0} t10))
-
-(comment (def t11 (aidoc/compile [:test? {:key :foo :val [:aido/ifn :x] :oper =}] op-fns))
-         (expect 99 (get-in t11 [1 :val])))
+(expect (:fn-opts (meta (second t12))))
+(expect SUCCESS (tick-status {:foo 99} t12))
+(expect FAILURE (tick-status {:foo 0} t12))
 
 ; DB lookup options
 
-(def t12 (aidoc/compile [:equal? {:v1 99 :v2 [:aido/db :data]}]))
-(expect SUCCESS (tick-status {:data 99} t12))
+(def t13 (aidoc/compile [:equal? {:v1 99 :v2 [:aido/db :data]}]))
+
+(expect (:db-opts (meta (second t13))))
+(expect SUCCESS (tick-status {:data 99} t13))
 
 
 ; Check that walking doesn't stray into options

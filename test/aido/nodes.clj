@@ -20,7 +20,8 @@
 
 (defmethod ai/tick :test?
   [db [node-type {:keys [key oper val] :as options} & _]]
-  (let [result (oper val (get db key))]
+  (let [val*   (get db key)
+        result (oper val val*)]
     (ai/tick-result (ai/succeed-if result) db)))
 
 
