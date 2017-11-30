@@ -79,6 +79,7 @@
   (expect SUCCESS status)
   (expect {} db))
 
+(expect SUCCESS (tick-status {} (aidoc/compile [:always [:failure]])))
 
 
 
@@ -92,13 +93,22 @@
 
 ; Function options
 
-(def op-fns {:x (constantly 99)})
+(def op-fns {:x (constantly 99)
+             :+ +})
 
 (def t12 (aidoc/compile [:test? {:key :foo :val [:aido/fn :x] :oper =}] op-fns))
 
 (expect (:fn-opts (meta (second t12))))
 (expect SUCCESS (tick-status {:foo 99} t12))
 (expect FAILURE (tick-status {:foo 0} t12))
+
+(def t12-2 (aidoc/compile [:sequence [:test? {:key :foo :val [:aido/fn :+ 5 6 2] :oper =}]] op-fns))
+
+(expect (:fn-opts (meta (get-in t12-2 [2 1]))))
+(expect SUCCESS (tick-status {:foo 13} t12-2))
+(expect FAILURE (tick-status {:foo 12} t12-2))
+
+(expect clojure.lang.ExceptionInfo (aidoc/compile [:test? {:key :foo :val [:aido/fn :unknown] :oper =}] op-fns))
 
 ; DB lookup options
 

@@ -35,18 +35,21 @@
 
 (defn replace-dynamic-option
   "Given an option opt val where val is of the form [:aido/... ...] perform a dynamic replacement."
-  [fns opts [opt val]]
+  [do-fns opts [opt val]]
   (let [opts* (assoc opts opt val)]
     (if (and (vector? val) (keyword? (first val)) (= "aido" (namespace (first val))))
       (let [op (keyword (name (first val)))]
         (case op
           :db (let [key-path (rest val)]
                 (vary-meta opts* update :db-opts assoc opt (fn [db] (get-in db key-path))))
-          :fn (let [[fn-id & args] (rest val)]
-                (vary-meta opts* update :fn-opts assoc opt (fn [] (apply (get fns fn-id) args))))))
+          :fn (let [[fn-id & args] (rest val)
+                    do-fn (get do-fns fn-id)]
+                (if (nil? do-fn)
+                  (throw (ex-info (str "No such function '" fn-id "' found in dynamic functions [" do-fns "]") {})))
+                (vary-meta opts* update :fn-opts assoc opt (fn [] (apply do-fn args))))))
       opts*)))
 
-(defn replace-fn-options
+(defn replace-dynamic-options
   "Given a map of options replace-fn-options replaces those that are intended to be dynamic. A dynamic
   option is an option whose value is a vector of the form [:fn/name ...] or [:fn*/name ...]. In this
   case 'name' should be the name of a function passed to the compile function. Where the name is in
@@ -59,8 +62,8 @@
   be regenerated each time the tree is deserialised. Compile time replacements are replacements by
   values that can be serialised."
   [fns opts]
-  (let [rfn (partial replace-dynamic-option fns)]
-    (reduce rfn {} opts)))
+  (let [replacer (partial replace-dynamic-option fns)]
+    (reduce replacer {} opts)))
 
 (defn next-auto-id
   "Return next sequential id."
@@ -103,7 +106,7 @@
              req-children (ao/children tree)
              [opts children] (ao/parse-options tree tail :required req-opts)
              opts*        (->> opts
-                               (replace-fn-options opt-fns)
+                               (replace-dynamic-options opt-fns)
                                (assign-auto-id))]
          (verify-children tree req-children children)
-         (into [node-type opts*] (map compile children)))))))
+         (into [node-type opts*] (map (fn [child] (compile child opt-fns)) children)))))))
