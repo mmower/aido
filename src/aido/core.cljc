@@ -99,7 +99,7 @@
   the working memory database and then remove them once the tick is complete. The map is associated
   under the key `:aido/wmem`."
   ([db tree]
-    (run-tick db tree {}))
+   (run-tick db tree {}))
   ([db tree local-defs]
    (let [{:keys [status db]} (tick-child (assoc db :aido/wmem local-defs) tree)]
      (tick-result status (dissoc db :aido/wmem)))))
@@ -272,7 +272,7 @@ pos?
   1)
 
 (defmethod tick :always
-  [db [node-type options [child & _]]]
+  [db [node-type options child]]
   (let [{:keys [status db]} (tick-child db child)]
     (tick-success db)))
 
@@ -285,7 +285,7 @@ pos?
   1)
 
 (defmethod tick :never
-  [db [node-type options [child & _]]]
+  [db [node-type options child]]
   (let [{:keys [status db]} (tick-child db child)]
     (tick-failure db)))
 
@@ -298,7 +298,7 @@ pos?
   1)
 
 (defmethod tick :invert
-  [db [node-type options [child & _]]]
+  [db [node-type options child]]
   (let [{:keys [status db]} (tick-child db child)
         inverted-status (condp = status
                           :SUCCESS :FAILURE
