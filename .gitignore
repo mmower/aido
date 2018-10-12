@@ -10,3 +10,6 @@ pom.xml.asc
 .hgignore
 .hg/
 aido.iml
+.idea
+*.iml
+.cpcache
