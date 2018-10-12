@@ -91,7 +91,7 @@
 (defn tick-child [db child]
   "The tick function should not be called directly because the child may contain unrealised options.
   Calling tick-child ensures options are realised before the child tick function is called."
-  (tick db (ac/realise-options child)))
+  (tick db (ac/realise-options db child)))
 
 (defn run-tick
   "The run-tick function is a top-level function for sending a tick to a node tree. Its purpose is to

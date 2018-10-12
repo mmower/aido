@@ -101,9 +101,7 @@
      (throw (ex-info (str "Unexpected input: " tree) {}))
      (let [[node-type & tail] tree]
        (if-not (keyword? node-type)
-         (throw (ex-info (str "Expected behaviour keyword: " node-type " (" (type node-type) ") in tree: " tree) {})))
-       (if-not (contains? (methods aido.core/tick) node-type)
-         (throw (ex-info (str "Unknown node type: " node-type " in tree: " tree) {})))
+         (throw (ex-info (str "Expected behaviour keyword: " node-type " (" (type node-type) ") in tree:" tree) {})))
        (let [req-opts     (ao/options tree)
              req-children (ao/children tree)
              [opts children] (ao/parse-options tree tail :required req-opts)
