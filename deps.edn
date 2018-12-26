@@ -1,0 +1,42 @@
+;; see https://github.com/seancorfield/dot-clojure
+{:mvn/repos {"sonatype" {:url "https://oss.sonatype.org/content/repositories/snapshots/"}}
+ :paths     ["src"]
+ :deps      {org.clojure/clojure              {:mvn/version "1.10.0"}}
+ :aliases
+ {;; - see https://github.com/slipset/deps-deploy
+  ;; - generate pom.xml via: clj -Spom
+  ;; - deploy via:
+  ;;   env CLOJARS_USERNAME=username CLOJARS_PASSWORD=password clj -a:deploy
+  :deploy {:extra-deps {deps-deploy {:mvn/version "RELEASE"}}
+          :main-opts ["-m" "deps-deploy.deps-deploy" "deploy"
+		      "target/aido.jar"]}
+    ;; testing and debugging tools:
+  :test {:extra-paths ["src" "test"]
+         :extra-deps {org.clojure/test.check {:mvn/version "RELEASE"}}}
+  ;; - see https://github.com/cognitect-labs/test-runner
+  ;; - run your tests: clj -A:test:runner
+  :runner {:extra-deps {com.cognitect/test-runner
+                        {:git/url "https://github.com/cognitect-labs/test-runner"
+                         :sha "3cb0a9daf1cb746259dc8309b218f9211ad3b33b"}}
+           :main-opts ["-m" "cognitect.test-runner"
+                       "-d" "test"
+                       "-d" "src/test/clojure"]}
+
+  ;; - see https://github.com/clojure-expectations/expectations
+  ;; - run your expectations: clj -A:test:expect:runner
+  :expect {:extra-deps {expectations {:mvn/version "RELEASE"}}}
+
+
+  ;; uberjar building:
+  ;; - see https://github.com/healthfinch/depstar for a minimalist approach:
+  ;;   - clj -A:depstar target/aido.jar
+  ;; - to run it:
+  ;;   - java -cp result.jar clojure.main -m mymain.namespace
+  :depstar {:extra-deps
+            {com.healthfinch/depstar
+             {:git/url "https://github.com/healthfinch/depstar.git"
+              :sha "2879672df7fd296855563c22dd9ba9de2022a0b4"}}
+            :main-opts ["-m" "hf.depstar.uberjar"]}
+
+
+  }}
