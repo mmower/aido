@@ -1,6 +1,7 @@
 (ns aido.core-test
   (:require [expectations :refer :all]
             [aido.core :refer :all]
+            [aido.tick :refer [tick]]
             [aido.compile :as aidoc]
             [aido.options :refer [options children]]
             [aido.nodes]))

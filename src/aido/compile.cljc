@@ -1,7 +1,8 @@
 (ns aido.compile
   (:refer-clojure :exclude [compile])
   (:require [clojure.string :as str]
-            [aido.options :as ao]))
+            [aido.options :as ao]
+            [aido.tick :as at]))
 
 ; We use a top-level atom because we want the ID of all behaviours across any tree to
 ; be unique since they may be referred to from a global map without context.
@@ -102,7 +103,7 @@
      (let [[node-type & tail] tree]
        (if-not (keyword? node-type)
          (throw (ex-info (str "Expected behaviour keyword: " node-type " (" (type node-type) ") in tree: " tree) {})))
-       (if-not (contains? (methods aido.core/tick) node-type)
+       (if-not (contains? (methods at/tick) node-type)
          (throw (ex-info (str "Unknown node type: " node-type " in tree: " tree) {})))
        (let [req-opts     (ao/options tree)
              req-children (ao/children tree)

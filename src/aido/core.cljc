@@ -2,7 +2,8 @@
   (:require [clojure.string :as str]
             [aido.error :refer [throw-error]]
             [aido.options :as ao]
-            [aido.compile :as ac]))
+            [aido.compile :as ac]
+            [aido.tick :as at]))
 
 (defn set-working-memory
   "Store a set of assignments in a fixed location, namespaced to aido."
@@ -65,33 +66,18 @@
 
 (def has-failed? (complement has-succeeded?))
 
-(defn tick-node-type
-  "Given a node [node-type & _] return the node-type for multi-method discrimination"
-  [db [node-type & _]] node-type)
 
 
-; The tick method has the signature
-;
-; [db node]
-;
-; where node can be destructured into
-;
-; [node-type options & children]
-;
-; db is the persistent database that conditions and actions can query about the domain
-; node-type is the behaviour node type keyword (e.g. :selector)
-; options is a map of options. Every node is guaranteed to have an :id value
-; children is the zero or more child nodes of this node
-;
-
-(defmulti tick
-          "The tick function sends the tick to a node of different types."
-          tick-node-type)
 
 (defn tick-child [db child]
   "The tick function should not be called directly because the child may contain unrealised options.
   Calling tick-child ensures options are realised before the child tick function is called."
-  (tick db (ac/realise-options child)))
+  (let [child* (ac/realise-options db child)
+        rv     (at/tick db child*)]
+    (assert (and (contains? rv :status)
+                 (contains? rv :db))
+            (str "Invalid return value [" rv "] from ticking child: " child))
+    rv))
 
 (defn run-tick
   "The run-tick function is a top-level function for sending a tick to a node tree. Its purpose is to
@@ -122,7 +108,7 @@
 (defmethod ao/children :loop [& _]
   1)
 
-(defmethod tick :loop [db [node-type {:keys [count]} & [child & _]]]
+(defmethod at/tick :loop [db [node-type {:keys [count]} & [child & _]]]
   (loop [db db
          n  0]
     (if (= count n)
@@ -144,7 +130,7 @@
 (defmethod ao/children :loop-until-success [& _]
   1)
 
-(defmethod tick :loop-until-success [db [node-type {:keys [count]} & [child & _]]]
+(defmethod at/tick :loop-until-success [db [node-type {:keys [count]} & [child & _]]]
   (loop [db db
          n  0]
     (if (= n count)
@@ -176,7 +162,7 @@ pos?
 (defmethod ao/children :parallel [& _]
   :some)
 
-(defmethod tick :parallel [db [node-type {:keys [mode how-many]} & children]]
+(defmethod at/tick :parallel [db [node-type {:keys [mode how-many]} & children]]
   (let [c            (count children)
         {:keys [success failure db]} (reduce (fn [{:keys [success failure db]} child]
                                                (let [result (tick-child db child)]
@@ -201,7 +187,7 @@ pos?
 (defmethod ao/children :selector [& _]
   :some)
 
-(defmethod tick :selector [db [node-type options & children]]
+(defmethod at/tick :selector [db [node-type options & children]]
   (loop [db        db
          child     (first children)
          remaining (rest children)]
@@ -228,7 +214,7 @@ pos?
 (defmethod ao/options :selector-p [& _]
   [:p])
 
-(defmethod tick :selector-p
+(defmethod at/tick :selector-p
   [db [node-type {:keys [p] :as options} & children]]
   (loop [db        db
          child     (first children)
@@ -255,7 +241,7 @@ pos?
 (defmethod ao/children :sequence [& _]
   :some)
 
-(defmethod tick :sequence [db [node-type options & children]]
+(defmethod at/tick :sequence [db [node-type options & children]]
   (reduce (fn [{:keys [db]} child]
             (let [result (tick-child db child)]
               (if (or (in-progress? result) (has-failed? result))
@@ -271,7 +257,7 @@ pos?
 (defmethod ao/children :always [& _]
   1)
 
-(defmethod tick :always
+(defmethod at/tick :always
   [db [node-type options child]]
   (let [{:keys [status db]} (tick-child db child)]
     (tick-success db)))
@@ -284,7 +270,7 @@ pos?
 (defmethod ao/children :never [& _]
   1)
 
-(defmethod tick :never
+(defmethod at/tick :never
   [db [node-type options child]]
   (let [{:keys [status db]} (tick-child db child)]
     (tick-failure db)))
@@ -297,7 +283,7 @@ pos?
 (defmethod ao/children :invert [& _]
   1)
 
-(defmethod tick :invert
+(defmethod at/tick :invert
   [db [node-type options child]]
   (let [{:keys [status db]} (tick-child db child)
         inverted-status (condp = status
@@ -326,7 +312,7 @@ pos?
 (defmethod ao/children :randomly [& _]
   #{1 2})
 
-(defmethod tick :randomly [db [node-type options & children]]
+(defmethod at/tick :randomly [db [node-type options & children]]
   (case (count children)
     1 (if (< (rand) (:p options))
         (tick-child db (first children))
@@ -347,11 +333,11 @@ pos?
 (defmethod ao/children :choose [& _]
   :some)
 
-(defmethod tick :choose [db [node-type options & children]]
+(defmethod at/tick :choose [db [node-type options & children]]
   (tick-child db (rand-nth children)))
 
-(defmethod tick :failure [db [node-type options & _]]
+(defmethod at/tick :failure [db [node-type options & _]]
   (tick-failure db))
 
-(defmethod tick :success [db [node-type options & _]]
+(defmethod at/tick :success [db [node-type options & _]]
   (tick-success db))

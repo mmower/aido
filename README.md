@@ -254,4 +254,4 @@ See `aido.core` source for definitions of the built in node-types.
 
 ## License
 
-Copyright 2017 Matthew Mower <self@mattmower.com>
+Copyright 2017-2018 Matthew Mower <self@mattmower.com>
