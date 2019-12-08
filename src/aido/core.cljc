@@ -155,7 +155,7 @@
 ;
 ; The :how-many option determines how many are required to succeed or fail.
 ;
-pos?
+
 (defmethod ao/options :parallel [& _]
   [:mode :test])
 
