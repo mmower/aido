@@ -46,6 +46,14 @@
   [db [node-type {:keys [key val] :as options}]]
   (ai/tick-success (assoc db key val)))
 
+(def finc (fnil inc 0))
+
+(defmethod ao/options :inc! [& _] [:key])
+
+(defmethod at/tick :inc!
+  [db [node-type {:keys [key] :as options}]]
+  (ai/tick-success (update-in db [key] finc)))
+
 
 (defmethod ao/options :counter! [& _] [:key])
 

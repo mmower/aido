@@ -16,24 +16,26 @@ specifies conditions we are interested in, actions that might be taken
 in responsento a given set of conditions, and some control flow mechanisms 
 hat govern how the tree "makes decisions".
 
-Those heart of the control flow are behaviours such as `sequence` and `selector`
+The heart of the control flow are behaviours such as `sequence` and `selector`
  and the notion that any element of the behaviour tree either results in
  **success** or **failure**. In particular, a sequence considers each of its
  children until one of them fails while a selector selects among its children
  until one succeeds. From such a simple premise quite complex behaviours can
  emerge.
+ 
+## Changelog
+
+* 15.07.20 - v0.4.0 - introduces the `:choose-each` node, implements 'node memory' for stateful node types, some expansion and tidying of documentation
 
 ## Specifying a tree
 
-`aido` behaviour trees are implemented as Clojure data structures much in the
-style of Hiccup markup. As such they can be implemented in EDN notation.
+`aido` behaviour trees are implemented as Clojure data structures much in the style of Hiccup markup. As such they can be implemented in EDN notation.
 
 The structure of a behaviour is
 
     [:ns/keyword {options}* children*]
     
-The core `aido` behaviours do not have a namespace prefix. Domain specific
-behaviours are recommended to be namespaced.
+The core `aido` behaviours do not have a namespace prefix. I recommend namespacing domain specific behaviours.
 
 The author has developed a convention that behaviours that form conditions should
 have a `?` suffix, e.g. `:time/after?` while behaviours that represent actions
@@ -126,19 +128,29 @@ In basic usage you must compile a behaviour tree using `aido.compile/compile` an
 use the `aido.core/run-tick` function. It is not recommend to call the `tick` function directly.
 
     (ns 'aido.example
-      (:require [aido.core :as ai]
-                [aido.compile :as ac]))
+      (:require
+        [aido.core :as ai]
+        [aido.compile :as ac]))
     
-    (let [tree (ac/compile [:selector
-                             [:sequence
-                               [:even? {:fn/coin}]
-                               [:heads!]
-                             [:tails!]]]) {:coin #(< (rand) 0.5)})
-          db*  {:foo :bar}]
-      (let [{:keys [db status]} (ai/run-tick db* tree)]
+    (let [tree-fns {:coin-toss #(< (rand) 0.5)}
+          tree     (ac/compile [:selector
+                                [:sequence
+                                 [:true? {:expr [:aido/fn coin-toss]}]
+                                 [:heads!]
+                                 [:tails!]]]
+                               tree-fns)
+          db       {:foo :bar}]
+      (let [{:keys [db* status]} (ai/run-tick db tree)]
         (if (= ai/SUCCESS status)
-          ; extract from or use db
+          ; extract from or use db*
           ; otherwise...))
+
+## Memory
+
+Some nodes use a working memory that is reset between invocations of `run-tick`. Some stateful nodes
+such as `:choose-each` use storage that is persisted in the database between invocations of `run-tick`
+using a namespaced key. It is important to preserve this key if the database is modified between
+invocations of `run-tick`.
 
 ## Built-ins
 
@@ -156,11 +168,24 @@ succeeds.
 
 ### :selector-p
 
+The `:selector-p` node iterates over its children in turn. For each child it does a probability
+check which, if it passes, selects that child to be ticked. The `:selector-p` succeeds or fails
+based on whether the child succeeds or fails. If the probability test does not pass for any
+child `:selector-p` fails.
+
+#### Parameters
+
+`:p` - probability of ticking any child (0…1)
+
 ### :loop
 
 The `:loop` node executes a single child a specified number of times. It is
 successful if it completes the specified iterations. If the child fails
 then the `:loop` fails.
+
+#### Parameters
+
+`:count` - number of times the loop should execute 
 
 ### :loop-until-success
 
@@ -168,9 +193,19 @@ The `:loop-until-success` node executes a child up to a specified number of time
 If the child succeeds then the `:loop-until-success` succeeds. Otherwise, after
 the specified number of iterations the `:loop-until-success` fails.
 
+#### Parameters
+
+`:count` - number of times the loop should execute
+
 ### :parallel
 
 The `:parallel` node executes all of its children.
+
+#### Parameters
+
+`:mode` - When `:mode` is `:success` the `:how-many` parameter refers to how many children must succeed. When `:mode`
+ is `:failure` the parameter refers to how many children must fail. 
+`:how-many` - Number of children that must succeed or fail for the node to return success or failure
 
 ### :randomly
 
@@ -182,7 +217,11 @@ or fails if the child succeeds or fails. If the `p` test fails `:randomly` fails
 
 With two children `:randomly` evaluates the first child if the p test passes or
 the second child if it fails. `:randomly` succeeds or fails based on the selected
-child succeeding or failing. 
+child succeeding or failing.
+
+#### Parameters
+
+`:p` - probability
 
 ### :choose
 
@@ -190,7 +229,24 @@ The `:choose` node takes one or more children and, when evaluated, randomly
 selects one child and ticks it. `:choose` succeeds or fails if the child
 succeeds or fails.
 
+### :choose-each
+
+The `:choose-each` node takes one or more children and, when evaluated, randomly
+selects one child, ticks, and then marks it. Once a node has been marked it will
+not be choosen again. `:choose-each` succeeeds or fails if the child
+succeeds or fails. Subsequent ticks will always select from unmarked children.
+
+#### Parameters
+
+`:repeat` - if repeat is `true`, after all children have been ticked the node "refills" its
+children. If repeat is `false` after all children have been ticked the node will thereafter
+fail.
+
 ### :invert
+
+The `:invert` node takes a single child. When `:invert` is ticked it ticks its child and inverts
+the success or failure of the child. So if the child returns failure, invert returns success
+and vice verca.
 
 ### :always
 
@@ -211,13 +267,6 @@ with additional options.
 ### :weighted-choice
 
 The `:weighted-choice` node randomly selects a child to tick based on some weighting algorithm.
-
-### :choice-without-repetition
-
-The `:choice-without-repetition` node randomly selects a child to tick excluding children that
-have been ticked before. This is then a stateful node that uses the working memory to track which
-of its children have already been ticked. We may anticipate that a requirement might exist for
-some way to reset the memory.
 
 ## Extending AIDO
 
@@ -250,7 +299,7 @@ See `aido.core` source for definitions of the built in node-types.
               [aido.compile :as ac])
     
     (let [tree (ac/compile ...)]
-      (tick {} tree {}))
+      (aido/run-tick {} tree))
 
 ## License
 

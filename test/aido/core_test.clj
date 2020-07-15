@@ -118,6 +118,51 @@
 (expect (:db-opts (meta (second t13))))
 (expect SUCCESS (tick-status {:data 99} t13))
 
+; Test CHOOSE-EACH
+
+;
+;
+;
+(def t14 (aidoc/compile [:choose-each {:repeat true}
+                         [:inc! {:key :foo}]
+                         [:inc! {:key :bar}]
+                         [:inc! {:key :baz}]]))
+
+(loop [db {}
+       n  0]
+  (let [result (run-tick db t14)
+        status (:status result)
+        db'    (:db result)]
+    (expect SUCCESS status)
+    (if (< n 5)
+      (recur db' (inc n))
+      (do
+        (expect 2 (:foo db'))
+        (expect 2 (:bar db'))
+        (expect 2 (:baz db'))))))
+
+(def t15 (aidoc/compile [:choose-each {:repeat false :debug true}
+                         [:inc! {:key :foo}]
+                         [:inc! {:key :bar}]
+                         [:inc! {:key :baz}]]))
+
+(expect SUCCESS (:status (run-tick {} t15)))
+
+;(loop [db {}
+;       n 0]
+;  (let [result (run-tick db t15)
+;        status (:status result)
+;        db'    (:db result)]
+;    (expect SUCCESS status)
+;    (if (< n 2)
+;      (recur db' (inc n))
+;      (do
+;        (expect 1 (:foo db'))
+;        (expect 1 (:bar db'))
+;        (expect 1 (:baz db'))
+;        (let [result (run-tick db' t15)
+;              status (:status result)]
+;          (expect FAILURE status))))))
 
 ; Check that walking doesn't stray into options
 

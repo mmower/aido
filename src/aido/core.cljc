@@ -5,14 +5,42 @@
             [aido.compile :as ac]
             [aido.tick :as at]))
 
-(defn set-working-memory
-  "Store a set of assignments in a fixed location, namespaced to aido."
-  [db assigns]
-  (assoc db :aido/wmem assigns))
+(def STS-KEY ::working-memory)
+(def LTS-KEY ::node-memory)
 
-(defn get-working-memory [db key]
+(defn set-memory
+  "Store a set of assignments in a fixed location, namespaced to aido."
+  [db length key mem]
+  (assoc-in db [length key] mem))
+
+(defn get-memory
   "Get one of the namespaced working-memory assignments."
-  (get-in db [:aido/wmem key]))
+  ([db length key not-found]
+   (get-in db [length key] not-found))
+  ([db length key]
+   (get-memory db length key nil)))
+
+(defn set-working-memory
+  "Sets a key-value pair in working memory. This memory is reset at the end of the tick."
+  [db key mem]
+  (set-memory db STS-KEY key mem))
+
+(defn get-working-memory
+  ([db key not-found]
+   (get-memory db STS-KEY key not-found))
+  ([db key]
+   (get-memory db STS-KEY key)))
+
+(defn set-node-memory
+  "Sets memory that is associated with a specific node. This memory persists in the database between tree ticks."
+  [db node-id mem]
+  (set-memory db LTS-KEY node-id mem))
+
+(defn get-node-memory
+  ([db node-id not-found]
+   (get-memory db LTS-KEY node-id not-found))
+  ([db node-id]
+   (get-memory db LTS-KEY node-id)))
 
 (def SUCCESS :success)
 (def FAILURE :failure)
@@ -87,8 +115,8 @@
   ([db tree]
    (run-tick db tree {}))
   ([db tree local-defs]
-   (let [{:keys [status db]} (tick-child (assoc db :aido/wmem local-defs) tree)]
-     (tick-result status (dissoc db :aido/wmem)))))
+   (let [{:keys [status db]} (tick-child (assoc db STS-KEY local-defs) tree)]
+     (tick-result status (dissoc db STS-KEY)))))
 
 
 ; Core node types
@@ -146,7 +174,7 @@
 ;
 ; Parameters
 ; :mode [:success|:failure]
-; :test [<n>|:any|:all]
+; :how-many <n> (1…)
 ;
 ; The PARALLEL node executes all of its children.
 ;
@@ -157,7 +185,7 @@
 ;
 
 (defmethod ao/options :parallel [& _]
-  [:mode :test])
+  [:mode :how-many])
 
 (defmethod ao/children :parallel [& _]
   :some)
@@ -336,8 +364,62 @@
 (defmethod at/tick :choose [db [node-type options & children]]
   (tick-child db (rand-nth children)))
 
+; FAILURE
+;
+; The :failure node always fails immediately
+
 (defmethod at/tick :failure [db [node-type options & _]]
   (tick-failure db))
 
+; SUCCESS
+;
+; The :success node always succeeds immediately
+
 (defmethod at/tick :success [db [node-type options & _]]
   (tick-success db))
+
+; CHOOSE-EACH
+; Stateful
+;
+; The :choose-each node takes a number of children which are put into a pool.
+; Each time the node is ticked it removes one child from the pool, ticks it,
+; and returns the result.
+;
+; In this way every child will eventually be ticked, but in a random order.
+;
+; Parameters
+; :repeat - if true, when the pool is emptied the original children are re-added
+; and a new random choice is made. If false, when the pool is empty it is not
+; refilled and the node will return FAILURE in future ticks
+;
+; Returns
+; SUCCESS if it ticks a child and the child returns SUCCESS
+; FAILURE if it ticks a child and the child returns FAILURE
+; FAILURE if there is no child to tick
+;
+
+(defmethod ao/options :choose-each [& _]
+  [:repeat])
+
+(defmethod ao/children :choose-each [& _]
+  :some)
+
+(defmethod at/tick :choose-each [db [node-type options & children]]
+  (let [node-id     (:id options)
+        repeat?     (get options :repeat false)
+        mem         (get-node-memory db node-id {})
+        pool        (:pool mem)
+        first-fill? (get mem :first-fill? true)]
+    (if (and (not repeat?) (empty? pool) (and (not first-fill?)))
+      (tick-failure db)
+      (let [pool'  (if (empty? pool) children pool)
+            choice (rand-nth pool')
+            pool'' (remove #(= choice %) pool')
+            mem'   (-> mem
+                       (assoc :first-fill? false)
+                       (assoc :pool pool''))
+            result (tick-child db choice)
+            db'    (:db result)
+            status (:status result)
+            db''   (set-node-memory db' node-id mem')]
+        (tick-result status db'')))))
