@@ -4,11 +4,11 @@
 for implementing AI game behaviour.
 
 `aido` behaviour trees are implemented as Clojure data structures much in the
-style of hiccup markup. As such they can be implemented in EDN notation.
+style of hiccup markup, i.e. in EDN notation.
 
 The structure of a behaviour is
 
-    [:ns/keyword {options}* children*]
+    [:ns/keyword {options}? children*]
 
 for example
 
@@ -18,24 +18,31 @@ or
 
     [:succeeds]
 
-A behaviour can optionally specify a map of options that will be passed to the
-appropriate tick function. If no map of options is specified a default map
-will be provided.
-
 A behaviour can have zero or more child behaviours. For example the `[:selector]`
-and `[:sequence]` behaviour expect at least one child.
+and `[:sequence]` behaviour expect at least one child while the `[:loop]` behaviour
+expects exactly one child.
 
-Because functions are not allowed in EDN the use of inline functions is not
-permitted however functions can be supplied for parameters using a set of
-named functions that are registered, in advance, with the compiler`.
+A behaviour can optionally specify a map of options that will be passed to the
+appropriate tick function. It is possible to specify dynamic values for options
+however, because functions are not allowed in EDN, functions are, instead, specified
+using the following syntax 
 
-To distinguish from regular keyword arguments functions are specified as
-keywords in the `fn` namespace, e.g.
+Where a regular function would be written
+
+    (random 5)
+    
+An AIDO function call is written:
+
+    [:fn/random 5]
+    
+For example:
 
     [:loop {:count [:fn/random 5]}
       ...]
-      
-Where the `random` function is specified to the compiler as, for example,
+   
+The use of the `:fn` namespace helps distinguish such arguments structures from
+regular vectors with keywords. The definition of the `random` function would be
+provided to the call to `compile` at runtime. E.g.
 
     {:random (fn [n] (inc (rand n)))}
 
@@ -44,15 +51,16 @@ Where the `random` function is specified to the compiler as, for example,
 Behaviours are specified as a tree of nodes that can be "ticked". Ticking a node
 evaluates it and, depending on the behaviour of the specific node, any children.
 
-When a node is ticked it returns a status that is either SUCCESS or FAILURE (in
-fact it may also return RETURNING or ERROR but we'll cover those later).
+When a node is ticked it generally returns a status of either SUCCESS or FAILURE. Under
+certain circumstances is may also return one of RUNNING or ERROR but these are special
+values that will be covered later.
 
 The SUCCESS or FAILURE of child nodes is how decisions flow through the tree. For
-example a SELECTOR node looks for the first child returning SUCCESS to know when
+example. a SELECTOR node looks for the first child returning SUCCESS to know when
 to stop, and so on.
 
 Nodes can be passed options that customise how they behave. For example the
-LOOP node should be passed a `:count` parameter specifying how many times it
+`[:loop]` node should be passed a `:count` parameter specifying how many times it
 should loop.
 
 All nodes have an `:id` option that uniquely identifies them. If no `:id` is
@@ -62,18 +70,23 @@ Before using a tree it must be compiled. This verifies that required options
 are present (or defaults are supplied) and that each node has the correct amount
 of children.
  
-
-
-
-
 ## Running
 
-We do not yet support the RUNNING status and treat it as success. A node
-that wants to return RUNNING could store and look for its `:id` in the database.
+In descriptions of Behaviour Trees the RUNNING status represents a process that has
+begun but cannot be completed in the current tick. When a node returns the RUNNING
+status evaluation of the tree should be halted with the entire tree returning the
+RUNNING status. At the next tick, processing of the tree should begin at the node
+that originally returned RUNNING.
 
-However it seems like when a node returns RUNNING processing of the tree should
-halt and, at the next tick, restart from this node. It's not yet clear how to
-implement this behaviour.
+This status & behaviour is not yet supported and returning RUNNING is equivalent to
+returning SUCCESS.
+
+## Error
+
+The ERROR status is intended to represent a serious problem that prevents normal
+processing of the behaviour tree. None of the built-in nodes returns ERROR and, at
+present, it is equivalent to returning FAILURE. 
+
 
 ## Built-ins
 
@@ -122,6 +135,19 @@ succeeding or failing.
 The CHOOSE node takes one or more children and, when evaluated, randomly
 selects one child and ticks it. CHOOSE succeeds or fails if the child
 succeeds or fails.
+
+### CHOOSE-EACH
+
+The `[:choose-each]` node is designed to select from among its children at
+random but without replacement. Each time it is ticked a child is selected
+and ticked with `[:choose-each]` returning SUCCESS or FAILURE as per the child. In
+subsequent ticks that child is no longer eligible to be selected.
+
+Once all children have been ticked, further ticks of the `[:choose-each]` will
+return FAILURE. Alternatively if the `repeat` option is specified as `true` then
+when all children have been ticked the node is replenished with all its children
+again. In this case the order of children will be again random and not the same
+order as previous ticks.  
 
 ### ALWAYS
 
